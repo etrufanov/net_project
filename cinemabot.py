@@ -76,5 +76,43 @@ async def get_answer(message: types.Message, film: tp.Dict[str, str]):
                              .format(film['genre'], film['desc'], film['rus_title'], film['play_ref']),
                                      parse_mode="Markdown", disable_web_page_preview=True)
 
+
+@dp.message_handler()
+async def echo(message: types.Message):
+    waiting = await message.answer_sticker('CAACAgIAAxkBAAECT4lgoZ2v3BKvGlhZZYVuaEeOH3vdFgACIwADKA9qFCdRJeeMIKQGHwQ')
+    async with aiohttp.ClientSession() as session:
+        search_url = "https://www.film.ru/search/result?text={}&type=movies&s=rel".format(message.text.lower())
+        async with session.get(search_url) as resp:
+            html = await resp.text()
+            soup = BeautifulSoup(html, 'lxml')
+            try:
+                a_films = soup.find('div', class_='rating').find_all('a', href=True)
+            except AttributeError:
+                a_films = []
+            for a_film in a_films:
+                try:
+                    if (a_film['title'].translate(str.maketrans('', '', string.punctuation)).lower() ==
+                        message.text.translate(str.maketrans('', '', string.punctuation)).lower() or
+                        a_film.find('span').text.translate(str.maketrans('', '', string.punctuation)).lower() ==
+                        message.text.translate(str.maketrans('', '', string.punctuation)).lower()):
+                        await get_answer(message, await get_film(session,
+                                                        'https://www.film.ru' + a_film['href'],
+                                                        a_film['title'],
+                                                        message.text))
+                        break
+                except AttributeError:
+                    continue
+            else:
+                if a_films:
+                    await get_answer(message, await get_film(session,
+                                                       'https://www.film.ru' + a_films[0]['href'],
+                                                        a_films[0]['title'],
+                                                        message.text))
+                else:
+                    await message.answer('По вашему запросу найден только коть')
+                    await message.answer_sticker('CAACAgIAAxkBAAECT5BgoaKryFeFlWH0vKA7IReI-Y_HrgACJQADKA9qFF60Uhxmag7DHwQ')
+        await waiting.delete()
+
+
 if __name__ == '__main__':
     executor.start_polling(dp)
